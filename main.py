@@ -1,52 +1,42 @@
 from telegram import (
     Update,
     InlineKeyboardMarkup,
-    InlineKeyboardButton,
-    ReplyKeyboardMarkup,
-    KeyboardButton
+    InlineKeyboardButton
 )
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
     CallbackQueryHandler,
-    MessageHandler,
-    filters,
     ConversationHandler,
-    ContextTypes,
+    ContextTypes
 )
 import logging
-import json
 import sqlite3
-import random
 import datetime
-import string
-
-TOKEN = "7648801895:AAG7U0stJOT5fvATpAjKvdmOUrJApE-G-BY"
+import random
+TOKEN = "BOT_TOKEN"
 DB_FILE = 'scores.db'
 POINT_TIERS = {'easy': 100, 'medium': 500, 'hard': 1000}
 (
-    SELECT_PLAYERS, WAIT_PLAYERS,
-    DICE_CHOICE, NUMBER_GUESS,
-    SELECT_TIER, SELECT_TOPIC,
-    ASK_QUESTION, GAME_OVER
-) = range(8)
+    SELECT_TIER,
+    SELECT_TOPIC,
+    ASK_QUESTION,
+    GAME_OVER
+) = range(4)
 
 games = {}
-
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
-
-
 def init_db():
     with sqlite3.connect(DB_FILE) as conn:
         conn.execute('''CREATE TABLE IF NOT EXISTS results (
             game_id TEXT PRIMARY KEY,
             timestamp TEXT,
-            players TEXT,
-            scores TEXT
+            topic TEXT,
+            score INTEGER
         )''')
 
 
@@ -58,482 +48,258 @@ def save_game(game_id):
             (
                 game_id,
                 datetime.datetime.now().isoformat(),
-                json.dumps([p[1] for p in game['players']]),
-                json.dumps(game['scores'])
+                game['topic'],
+                game['score']
             )
         )
 
-
 QUESTIONS = {
     "Математика": [
-        {"question": "Сколько будет 7 + 5?", "options": ["10", "11", "12", "13"], "answer": 2,
-         "points": POINT_TIERS['easy']},
-        {"question": "Чему равен корень из 81?", "options": ["7", "8", "9", "10"], "answer": 2,
-         "points": POINT_TIERS['easy']},
-        {"question": "Вычислите 15 × 12.", "options": ["170", "180", "190", "200"], "answer": 1,
-         "points": POINT_TIERS['medium']},
-        {"question": "Сумма углов треугольника?", "options": ["90°", "180°", "270°", "360°"], "answer": 1,
-         "points": POINT_TIERS['easy']},
-        {"question": "Решите 2x - 4 = 10.", "options": ["3", "6", "7", "8"], "answer": 2,
-         "points": POINT_TIERS['medium']},
-        {"question": "log₂32 = ?", "options": ["4", "5", "6", "8"], "answer": 1, "points": POINT_TIERS['hard']},
-        {"question": "Площадь круга радиус 4.", "options": ["8π", "12π", "16π", "20π"], "answer": 2,
-         "points": POINT_TIERS['medium']},
-        {"question": "Простых чисел <20?", "options": ["7", "8", "9", "10"], "answer": 1,
-         "points": POINT_TIERS['hard']},
-        {"question": "3⁵ = ?", "options": ["243", "125", "81", "312"], "answer": 0, "points": POINT_TIERS['medium']},
-        {"question": "(x+2)(x-2) при x=5.", "options": ["21", "25", "27", "35"], "answer": 0,
-         "points": POINT_TIERS['hard']}
+        {"question": "Сколько будет 8 + 7?",       "options": ["13","14","15","16"], "answer": 1, "points": POINT_TIERS['easy']},
+        {"question": "12 − 5 = ?",                  "options": ["6","7","8","9"],     "answer": 1, "points": POINT_TIERS['easy']},
+        {"question": "Сколько будет 6 × 2?",       "options": ["10","12","14","16"], "answer": 1, "points": POINT_TIERS['easy']},
+        {"question": "9 ÷ 3 = ?",                  "options": ["2","3","4","5"],     "answer": 1, "points": POINT_TIERS['easy']},
+        {"question": "2 + 3 + 4 = ?",              "options": ["7","8","9","10"],    "answer": 2, "points": POINT_TIERS['easy']},
+        {"question": "15 − 7 = ?",                 "options": ["6","7","8","9"],     "answer": 2, "points": POINT_TIERS['easy']},
+        {"question": "Сколько будет 5 + 9?",       "options": ["13","14","15","16"], "answer": 1, "points": POINT_TIERS['easy']},
+        {"question": "Вычислите 14 × 6.",           "options": ["74","84","94","104"], "answer": 1, "points": POINT_TIERS['medium']},
+        {"question": "56 ÷ 8 = ?",                  "options": ["6","7","8","9"],     "answer": 1, "points": POINT_TIERS['medium']},
+        {"question": "Сумма углов квадрата?",      "options": ["180°","270°","360°","450°"], "answer": 2, "points": POINT_TIERS['medium']},
+        {"question": "Площадь прямоугольника 4×7.", "options": ["11","21","28","32"],   "answer": 2, "points": POINT_TIERS['medium']},
+        {"question": "Среднее арифметическое 4,6,8?", "options": ["5","6","7","8"],   "answer": 2, "points": POINT_TIERS['medium']},
+        {"question": "Вычислите 9² − 5².",           "options": ["16","25","56","106"], "answer": 0, "points": POINT_TIERS['medium']},
+        {"question": "Корень из 144 = ?",           "options": ["10","11","12","13"], "answer": 2, "points": POINT_TIERS['medium']},
+        {"question": "log₂16 = ?",                  "options": ["2","3","4","5"],     "answer": 2, "points": POINT_TIERS['hard']},
+        {"question": "3⁴ = ?",                      "options": ["27","64","81","108"], "answer": 1, "points": POINT_TIERS['hard']},
+        {"question": "sin 30° =",                   "options": ["½","√2/2","√3/2","1"], "answer": 0, "points": POINT_TIERS['hard']},
+        {"question": "Чему равен 7C2?",             "options": ["21","14","35","28"],  "answer": 1, "points": POINT_TIERS['hard']},
+        {"question": "Значение e⁰ = ?",             "options": ["0","1","e","e²"],     "answer": 1, "points": POINT_TIERS['hard']},
+        {"question": "log₁₀1000 =",                 "options": ["1","2","3","4"],     "answer": 2, "points": POINT_TIERS['hard']},
+        {"question": "Процент от числа: 15% от 200?", "options": ["20","25","30","35"], "answer": 2, "points": POINT_TIERS['hard']},
     ],
+
     "История": [
-        {"question": "Крещение Руси в каком году?", "options": ["988", "989", "990", "991"], "answer": 0,
-         "points": POINT_TIERS['easy']},
-        {"question": "Начало ВОВ?", "options": ["1939", "1940", "1941", "1942"], "answer": 2,
-         "points": POINT_TIERS['easy']},
-        {"question": "Первый император Рима?", "options": ["Цезарь", "Август", "Нерон", "Тиберий"], "answer": 1,
-         "points": POINT_TIERS['medium']},
-        {"question": "Падение Западной Римской империи?", "options": ["476", "486", "496", "506"], "answer": 0,
-         "points": POINT_TIERS['medium']},
-        {"question": "Французская революция?", "options": ["1789", "1799", "1804", "1815"], "answer": 0,
-         "points": POINT_TIERS['easy']},
-        {"question": "Лидер после Ленина?", "options": ["Хрущев", "Сталин", "Маленков", "Берия"], "answer": 1,
-         "points": POINT_TIERS['hard']},
-        {"question": "Основание СПб?", "options": ["1703", "1710", "1721", "1730"], "answer": 0,
-         "points": POINT_TIERS['medium']},
-        {"question": "Историю государства Российского написал?",
-         "options": ["Карамзин", "Толстой", "Всеволодов", "Пушкин"], "answer": 0, "points": POINT_TIERS['hard']},
-        {"question": "Принятие Конституции РФ 1993?", "options": ["1991", "1992", "1993", "1994"], "answer": 2,
-         "points": POINT_TIERS['medium']},
-        {"question": "Леонардо да Винчи жил в век?", "options": ["14", "15", "16", "17"], "answer": 2,
-         "points": POINT_TIERS['hard']}
+        {"question": "Год открытия Америки Колумбом?",     "options": ["1490","1492","1500","1502"], "answer": 1, "points": POINT_TIERS['easy']},
+        {"question": "Год крещения Руси?",                "options": ["987","988","989","990"],     "answer": 1, "points": POINT_TIERS['easy']},
+        {"question": "Начало Первой мировой войны?",       "options": ["1912","1914","1916","1918"], "answer": 1, "points": POINT_TIERS['easy']},
+        {"question": "Год падения Рима (западная часть)?", "options": ["455","465","476","486"],     "answer": 2, "points": POINT_TIERS['easy']},
+        {"question": "Кто был первым президентом США?",    "options": ["Джефферсон","Адамс","Вашингтон","Линкольн"], "answer": 2, "points": POINT_TIERS['easy']},
+        {"question": "Год Французской революции?",        "options": ["1776","1789","1799","1804"], "answer": 1, "points": POINT_TIERS['easy']},
+        {"question": "Год Великой Октябрьской социалистической революции?", "options": ["1915","1917","1919","1921"], "answer": 1, "points": POINT_TIERS['easy']},
+        {"question": "Год провозглашения Наполеона императором?", "options": ["1799","1802","1804","1806"], "answer": 2, "points": POINT_TIERS['medium']},
+        {"question": "Год издания Библии короля Якова?",     "options": ["1600","1604","1611","1620"], "answer": 2, "points": POINT_TIERS['medium']},
+        {"question": "Где проходила битва при Гастингсе?", "options": ["Франция","Англия","Нормандия","Шотландия"], "answer": 2, "points": POINT_TIERS['medium']},
+        {"question": "Кто возглавил СССР после Ленина?",     "options": ["Каменева","Троцкого","Сталин","Маленков"], "answer": 2, "points": POINT_TIERS['medium']},
+        {"question": "Год начала Крымской войны?",           "options": ["1842","1853","1861","1870"], "answer": 1, "points": POINT_TIERS['medium']},
+        {"question": "Год провозглашения США независимыми?", "options": ["1776","1783","1791","1801"], "answer": 0, "points": POINT_TIERS['medium']},
+        {"question": "Падение Берлинской стены произошло в?", "options": ["1987","1988","1989","1990"], "answer": 2, "points": POINT_TIERS['medium']},
+        {"question": "Год битвы при Ватерлоо?",           "options": ["1812","1815","1820","1825"], "answer": 1, "points": POINT_TIERS['hard']},
+        {"question": "Автор \"Истории государства Российского\"?", "options": ["Ломоносов","Карамзин","Толстой","Соловьев"], "answer": 1, "points": POINT_TIERS['hard']},
+        {"question": "Год подписания Версальского договора?", "options": ["1917","1918","1919","1920"], "answer": 2, "points": POINT_TIERS['hard']},
+        {"question": "Кто возглавил Францию после Наполеона Бонапарта?", "options": ["Людовик XVIII","Шарль X","Наполеон III","Луи-Филипп"], "answer": 0, "points": POINT_TIERS['hard']},
+        {"question": "Год убийства Юлия Цезаря?",           "options": ["44 до н.э.","42 до н.э.","40 до н.э.","38 до н.э."], "answer": 0, "points": POINT_TIERS['hard']},
+        {"question": "Где был заключён Потсдамский мир?",   "options": ["Варшава","Париж","Потсдам","Берлин"], "answer": 2, "points": POINT_TIERS['hard']},
+        {"question": "Год образования Лиги Наций?",        "options": ["1917","1918","1919","1920"], "answer": 2, "points": POINT_TIERS['hard']},
     ],
+
     "Наука": [
-        {"question": "Единица измерения силы в СИ?", "options": ["Ньютон", "Джоуль", "Вольт", "Ватт"], "answer": 0,
-         "points": POINT_TIERS['easy']},
-        {"question": "Скорость света в вакууме примерно?",
-         "options": ["3×10⁸ м/с", "3×10⁶ м/с", "3×10⁷ м/с", "3×10⁵ м/с"], "answer": 0,
-         "points": POINT_TIERS['easy']},
-        {"question": "Формула закона всемирного тяготения Ньютона?",
-         "options": ["F=ma", "F=Gm₁m₂/r²", "E=mc²", "pV=nRT"], "answer": 1, "points": POINT_TIERS['medium']},
-        {"question": "Что изучает ботаника?", "options": ["Растения", "Животные", "Грибы", "Бактерии"], "answer": 0,
-         "points": POINT_TIERS['easy']},
-        {"question": "Элемент с атомным номером 6?", "options": ["Углерод", "Кислород", "Азот", "Водород"],
-         "answer": 0, "points": POINT_TIERS['medium']},
-        {"question": "Период полураспада урана-238?",
-         "options": ["4.5 млрд лет", "4.5 млн лет", "4500 лет", "450 лет"], "answer": 0,
-         "points": POINT_TIERS['hard']},
-        {"question": "Основная функция митохондрий?",
-         "options": ["Энергетика клетки", "Синтез белка", "Деление клетки", "Хранение ДНК"], "answer": 0,
-         "points": POINT_TIERS['medium']},
-        {"question": "Закон Ома для участка цепи?", "options": ["U=IR", "P=UI", "Q=cmΔT", "E=mc²"], "answer": 0,
-         "points": POINT_TIERS['easy']},
-        {"question": "Что изучает зоология?", "options": ["Животных", "Растения", "Минералы", "Вирусы"],
-         "answer": 0, "points": POINT_TIERS['easy']},
-        {"question": "Основной газ атмосферы Земли?", "options": ["Азот", "Кислород", "CO₂", "Водород"],
-         "answer": 0, "points": POINT_TIERS['medium']}
+        {"question": "Единица измерения силы?",      "options": ["Ньютон","Джоуль","Вольт","Ватт"], "answer": 0, "points": POINT_TIERS['easy']},
+        {"question": "Скорость света примерно?",    "options": ["3×10⁵","3×10⁶","3×10⁷","3×10⁸ м/с"], "answer": 3, "points": POINT_TIERS['easy']},
+        {"question": "Единица измерения массы?",    "options": ["Килограмм","Метр","Литр","Секунда"],   "answer": 0, "points": POINT_TIERS['easy']},
+        {"question": "Сколько планет в Солнечной системе?", "options": ["7","8","9","10"], "answer": 1, "points": POINT_TIERS['easy']},
+        {"question": "Основной газ атмосферы Земли?", "options": ["Кислород","Азот","CO₂","Аргон"], "answer": 1, "points": POINT_TIERS['easy']},
+        {"question": "Цвет неба днём?",             "options": ["Красный","Синий","Зелёный","Чёрный"], "answer": 1, "points": POINT_TIERS['easy']},
+        {"question": "Элемент с атомным номером 1?", "options": ["Гелий","Водород","Кислород","Углерод"], "answer": 1, "points": POINT_TIERS['easy']},
+        {"question": "Формула скорости?",          "options": ["v=s/t","F=ma","E=mc²","pV=nRT"],  "answer": 0, "points": POINT_TIERS['medium']},
+        {"question": "Период полураспада урана-235 приблизительно?", "options": ["700 млн лет","700 тыс","70 тыс","7 млн"], "answer": 0, "points": POINT_TIERS['medium']},
+        {"question": "Что изучает ботаника?",      "options": ["Растения","Животные","Грибы","Бактерии"], "answer": 0, "points": POINT_TIERS['medium']},
+        {"question": "Основная функция митохондрий?", "options": ["Энергия","Ген","Синтез","Деление"], "answer": 0, "points": POINT_TIERS['medium']},
+        {"question": "Закон Ома: U = ?",           "options": ["I·R","P·I","Q·ΔT","m·a"],     "answer": 0, "points": POINT_TIERS['medium']},
+        {"question": "Плотность воды около?",      "options": ["0.1","1","10","100 г/см³"],    "answer": 1, "points": POINT_TIERS['medium']},
+        {"question": "Энергия фотона E = h·?",     "options": ["c","λ","f","m"],             "answer": 2, "points": POINT_TIERS['medium']},
+        {"question": "Уравнение Шредингера описывает?", "options": ["Электроны","Волну","Атом","Тепло"], "answer": 1, "points": POINT_TIERS['hard']},
+        {"question": "Константа Планка ≈",            "options": ["6.6×10⁻³⁴","6.6×10⁻²⁴","6.6×10⁻⁴","6.6×10⁻¹⁴"], "answer": 0, "points": POINT_TIERS['hard']},
+        {"question": "Что такое энтропия?",           "options": ["Энергия","Хаос","Масса","Давление"], "answer": 1, "points": POINT_TIERS['hard']},
+        {"question": "Чему равен гравитационный параметр G?", "options": ["6.67×10⁻¹¹","9.81","3×10⁸","1.6×10⁻¹⁹"], "answer": 0, "points": POINT_TIERS['hard']},
+        {"question": "Кто сформулировал теорию относительности?", "options": ["Ньютон","Эйнштейн","Галилей","Тесла"], "answer": 1, "points": POINT_TIERS['hard']},
+        {"question": "Чему равен pH нейтральной воды?", "options": ["6","7","8","9"], "answer": 1, "points": POINT_TIERS['hard']},
+        {"question": "Закон Бойля-Мариотта: PV = ?", "options": ["const","nRT","kE","mgh"], "answer": 0, "points": POINT_TIERS['hard']},
     ],
+
     "География": [
-        {"question": "Столица Франции?", "options": ["Берлин", "Париж", "Рим", "Мадрид"], "answer": 1,
-         "points": POINT_TIERS['easy']},
-        {"question": "Самый длинный континентальный хребет?",
-         "options": ["Анды", "Гималаи", "Альпы", "Скалистые горы"], "answer": 0, "points": POINT_TIERS['medium']},
-        {"question": "Где находится Марианская впадина?",
-         "options": ["Тихий океан", "Атлантический", "Индийский", "Северный ледовитый"], "answer": 0,
-         "points": POINT_TIERS['medium']},
-        {"question": "Через какую страну не протекает река Дунай?",
-         "options": ["Германия", "Франция", "Румыния", "Венгрия"], "answer": 1, "points": POINT_TIERS['hard']},
-        {"question": "Крупнейшее озеро Африки?", "options": ["Виктория", "Танганьика", "Малави", "Ньяса"],
-         "answer": 0, "points": POINT_TIERS['medium']},
-        {"question": "Самая высокая точка России?", "options": ["Эльбрус", "Казбек", "Дхаулагири", "Аннапурна"],
-         "answer": 0, "points": POINT_TIERS['hard']},
-        {"question": "Столица Австралии?", "options": ["Сидней", "Мельбурн", "Канберра", "Брисбен"], "answer": 2,
-         "points": POINT_TIERS['easy']},
-        {"question": "Какой материк самый большой?", "options": ["Азия", "Африка", "Европа", "Антарктида"],
-         "answer": 0, "points": POINT_TIERS['easy']},
-        {"question": "На каком материке находится пустыня Гоби?",
-         "options": ["Азия", "Африка", "Северная Америка", "Австралия"], "answer": 0,
-         "points": POINT_TIERS['medium']},
-        {"question": "Какой океан самый мелкий?",
-         "options": ["Северный ледовитый", "Индийский", "Атлантический", "Тихий"], "answer": 0,
-         "points": POINT_TIERS['hard']}
+        {"question": "Столица России?",       "options": ["Москва","Париж","Лондон","Берлин"], "answer": 0, "points": POINT_TIERS['easy']},
+        {"question": "Самая длинная река мира?", "options": ["Нил","Амазонка","Янцзы","Миссисипи"], "answer": 0, "points": POINT_TIERS['easy']},
+        {"question": "Континент Австралия относится к?", "options": ["Азии","Европе","Океании","Африке"], "answer": 2, "points": POINT_TIERS['easy']},
+        {"question": "Самая высокая гора —?", "options": ["Эверест","К2","Мак-Кинли","Эльбрус"], "answer": 0, "points": POINT_TIERS['easy']},
+        {"question": "Океан между Америкой и Африкой?", "options": ["Индийский","Атлантический","Тихий","Северный"], "answer": 1, "points": POINT_TIERS['easy']},
+        {"question": "Пустыня в Африке?",      "options": ["Сахара","Гоби","Калахари","Мохаве"],   "answer": 0, "points": POINT_TIERS['easy']},
+        {"question": "Столица Франции?",       "options": ["Рим","Берлин","Париж","Мадрид"],      "answer": 2, "points": POINT_TIERS['easy']},
+        {"question": "Столица Австралии?",     "options": ["Сидней","Мельбурн","Канберра","Перт"], "answer": 2, "points": POINT_TIERS['medium']},
+        {"question": "Где находится Марианская впадина?", "options": ["Атлантика","Индийский","Тихий","Северный лед."], "answer": 2, "points": POINT_TIERS['medium']},
+        {"question": "Самое большое озеро мира?", "options": ["Каспийское","Виктория","Танганьика","Мичиган"], "answer": 0, "points": POINT_TIERS['medium']},
+        {"question": "Самая длинная гора —?",   "options": ["Анды","Гималаи","Скалы","Альпы"],      "answer": 0, "points": POINT_TIERS['medium']},
+        {"question": "Где расположен вулкан Килауэа?", "options": ["Исландия","Гавайи","Индонезия","Япония"], "answer": 1, "points": POINT_TIERS['medium']},
+        {"question": "Страна с наибольшим населением?", "options": ["США","Индия","Китай","Россия"], "answer": 2, "points": POINT_TIERS['medium']},
+        {"question": "Самая глубокая озеро мира?", "options": ["Байкал","Виктория","Танганьика","Титикака"], "answer": 0, "points": POINT_TIERS['medium']},
+        {"question": "Высота Эвереста в метрах?", "options": ["8848","8611","8980","8125"], "answer": 0, "points": POINT_TIERS['hard']},
+        {"question": "Самая маленькая страна мира?", "options": ["Монако","Сан-Марино","Ватикан","Лихтенштейн"], "answer": 2, "points": POINT_TIERS['hard']},
+        {"question": "По какому меридиану отсчитывают долготу?", "options": ["0°","90°","180°","45°"], "answer": 0, "points": POINT_TIERS['hard']},
+        {"question": "Какая река протекает через Каир?", "options": ["Нил","Амазонка","Ганг","Рейн"], "answer": 0, "points": POINT_TIERS['hard']},
+        {"question": "Самая высокая вершина России?", "options": ["Эльбрус","Дхаулагири","Казбек","Аннапурна"], "answer": 0, "points": POINT_TIERS['hard']},
+        {"question": "Самая длинная река Европы?", "options": ["Волга","Рейн","Днепр","Дунай"], "answer": 0, "points": POINT_TIERS['hard']},
+        {"question": "Климатический пояс Москвы?", "options": ["Арктический","Тропический","Умеренный","Субтропический"], "answer": 2, "points": POINT_TIERS['hard']},
     ],
+
     "Культура": [
-        {"question": "Автор 'Евгения Онегина'?", "options": ["Пушкин", "Толстой", "Достоевский", "Гоголь"],
-         "answer": 0, "points": POINT_TIERS['easy']},
-        {"question": "Кто написал 'Войну и мир'?", "options": ["Пушкин", "Гоголь", "Толстой", "Тургенев"],
-         "answer": 2, "points": POINT_TIERS['easy']},
-        {"question": "Режиссер фильма 'Интерстеллар'?", "options": ["Нолан", "Кэмерон", "Содерберг", "Спилберг"],
-         "answer": 0, "points": POINT_TIERS['medium']},
-        {"question": "Какой художник создал 'Звездную ночь'?",
-         "options": ["Ван Гог", "Пикассо", "Рембрандт", "Монет"], "answer": 0, "points": POINT_TIERS['easy']},
-        {"question": "Композитор 'Лунной сонаты'?", "options": ["Бетховен", "Моцарт", "Бах", "Чайковский"],
-         "answer": 0, "points": POINT_TIERS['medium']},
-        {"question": "Автор цикла романов 'Песнь льда и пламени'?",
-         "options": ["Толкиен", "Мартин", "Роулинг", "Кинг"], "answer": 1, "points": POINT_TIERS['medium']},
-        {"question": "Какой стиль архитектуры характерен для собора Парижской Богоматери?",
-         "options": ["Готика", "Барокко", "Классицизм", "Ренессанс"], "answer": 0, "points": POINT_TIERS['hard']},
-        {"question": "Кто сочинил оперу 'Кармен'?", "options": ["Бизе", "Моцарт", "Верди", "Чайковский"],
-         "answer": 0, "points": POINT_TIERS['hard']},
-        {"question": "Жанр романа '1984'?", "options": ["Антиутопия", "Фантастика", "Драма", "Комедия"],
-         "answer": 0, "points": POINT_TIERS['easy']},
-        {"question": "Кто написал 'Мастер и Маргарита'?",
-         "options": ["Булгаков", "Пушкин", "Достоевский", "Гоголь"], "answer": 0, "points": POINT_TIERS['medium']}
+        {"question": "Автор 'Евгения Онегина'?",         "options": ["Пушкин","Толстой","Достоевский","Гоголь"], "answer": 0, "points": POINT_TIERS['easy']},
+        {"question": "Кто написал 'Войну и мир'?",       "options": ["Пушкин","Гоголь","Толстой","Тургенев"],     "answer": 2, "points": POINT_TIERS['easy']},
+        {"question": "Жанр романа '1984'?",             "options": ["Антиутопия","Фантастика","Драма","Комедия"], "answer": 0, "points": POINT_TIERS['easy']},
+        {"question": "Кто создал 'Звездную ночь'?",     "options": ["Ван Гог","Пикассо","Дали","Рембрандт"],     "answer": 0, "points": POINT_TIERS['easy']},
+        {"question": "Кто написал 'Мастер и Маргарита'?", "options": ["Булгаков","Пушкин","Достоевский","Гоголь"],  "answer": 0, "points": POINT_TIERS['easy']},
+        {"question": "Какая страна родина Рембрандта?",   "options": ["Италия","Франция","Нидерланды","Испания"],  "answer": 2, "points": POINT_TIERS['easy']},
+        {"question": "Жанр балета 'Лебединое озеро'?",   "options": ["Драма","Комедия","Балет","Опера"],         "answer": 2, "points": POINT_TIERS['easy']},
+        {"question": "Композитор 'Лунной сонаты'?",      "options": ["Бетховен","Моцарт","Бах","Чайковский"],    "answer": 0, "points": POINT_TIERS['medium']},
+        {"question": "Режиссер 'Интерстеллара'?",        "options": ["Нолан","Кэмерон","Спилберг","Тарантино"], "answer": 0, "points": POINT_TIERS['medium']},
+        {"question": "Автор 'Песни льда и пламени'?",    "options": ["Толкин","Мартин","Роулинг","Кинг"],         "answer": 1, "points": POINT_TIERS['medium']},
+        {"question": "Первый великий художник Возрождения?", "options": ["Микеланджело","Рафаэль","Боттичелли","Джотто"], "answer": 3, "points": POINT_TIERS['medium']},
+        {"question": "Где расположен Колизей?",           "options": ["Париж","Рим","Афины","Иерусалим"],           "answer": 1, "points": POINT_TIERS['medium']},
+        {"question": "Автор 'Гамлета'?",                 "options": ["Шекспир","Достоевский","Пушкин","Гоголь"],   "answer": 0, "points": POINT_TIERS['medium']},
+        {"question": "На каком языке оригинал 'Илиады'?", "options": ["Латинь","Санскрит","Греческий","Армянский"],  "answer": 2, "points": POINT_TIERS['medium']},
+        {"question": "Кто написал 'Божественную комедию'?", "options": ["Данте","Петрарка","Боккаччо","Тассо"], "answer": 0, "points": POINT_TIERS['hard']},
+        {"question": "Стиль архитектуры Нотр-Дама?",      "options": ["Готика","Ренессанс","Барокко","Классицизм"], "answer": 0, "points": POINT_TIERS['hard']},
+        {"question": "Автор 'Властелина колец'?",         "options": ["Толкин","Мартин","Роулинг","Кинг"],    "answer": 0, "points": POINT_TIERS['hard']},
+        {"question": "Где впервые поставлен балет 'Щелкунчик'?", "options": ["Париж","Санкт-Петербург","Лондон","Нью-Йорк"], "answer": 1, "points": POINT_TIERS['hard']},
+        {"question": "Кто написал 'Сто лет одиночества'?", "options": ["Гарсиа Маркес","Оруэлл","Хемингуэй","Фолкнер"], "answer": 0, "points": POINT_TIERS['hard']},
+        {"question": "Кто создал школу экспрессионизма Дада?", "options": ["Кандинский","Брейгель","Пикассо","Гоген"], "answer": 0, "points": POINT_TIERS['hard']},
+        {"question": "В каком веке жил Леонардо да Винчи?",  "options": ["13","14","15","16"],                       "answer": 3, "points": POINT_TIERS['hard']},
     ],
 }
 
-
-def generate_id():
-    return ''.join(random.choices(string.ascii_letters + string.digits, k=8))
-
-
-def roll_dice():
-    return random.randint(1, 6)
-
+INSTRUCTION = (
+    "Добро пожаловать в QuizBot!\n"
+    "Я задаю вопросы по выбранной сложности и теме.\n"
+    "Функции бота:\n"
+    "1️⃣ Выберите уровень сложности (легко, средне, сложно).\n"
+    "2️⃣ Выберите тему (например, Математика).\n"
+    "3️⃣ Ответьте на серию вопросов с 4 вариантами. За каждый правильный ответ вам дается количество очков в зависимости от уровня сложности, а за каждый неправильный в 2 раза меньше отнимается(то есть если за правильный ответ дается 500 очков то за неправильный отнимается 250)\n"
+    "4️⃣ Получите итоговый результат и возможность начать заново."
+)
 
 def restart_keyboard():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🔄 Перезапустить", callback_data="force_restart")]
+        [InlineKeyboardButton("🔄 Перезапустить", callback_data="restart")]
     ])
 
-
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data.clear()
-    reply_markup = ReplyKeyboardMarkup(
-        [[KeyboardButton("1"), KeyboardButton("2")]],
-        one_time_keyboard=True,
-        resize_keyboard=True
-    )
-
-    if update.callback_query:
-        await update.callback_query.edit_message_text(
-            "🎮 Выберите количество игроков:",
-            reply_markup=reply_markup
-        )
-    else:
-        await update.message.reply_text(
-            "🎮 Выберите количество игроков:",
-            reply_markup=reply_markup
-        )
-    return SELECT_PLAYERS
-
-
-async def restart_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    return await start(update, context)
-
-
-async def select_players(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    try:
-        players_count = int(update.message.text)
-        if players_count not in [1, 2]:
-            raise ValueError
-    except ValueError:
-        await update.message.reply_text("❌ Выберите 1 или 2", reply_markup=restart_keyboard())
-        return SELECT_PLAYERS
-
-    game_id = generate_id()
-    games[game_id] = {
-        'players': [(update.effective_user.id, update.effective_user.full_name)],
-        'scores': [0] * players_count,
-        'chat_id': update.effective_chat.id,
-        'dice': None,
-        'choices': {},
-        'current_player': 0,
-        'questions': [],
-        'current_question': 0
-    }
-    context.user_data['game_id'] = game_id
-
-    if players_count == 2:
-        bot = await context.bot.get_me()
-        invite_link = f"https://t.me/{bot.username}?start={game_id}"
-        await update.message.reply_text(
-            f"🔗 Пригласите второго игрока:\n{invite_link}",
-            reply_markup=restart_keyboard()
-        )
-        return WAIT_PLAYERS
-
-    return await start_single_player(update, context)
-
-
-async def start_single_player(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    game_id = context.user_data['game_id']
-    games[game_id]['dice'] = roll_dice()
-    await context.bot.send_message(
-        chat_id=games[game_id]['chat_id'],
-        text=f"🎲 Выпало: {games[game_id]['dice']}\nВыберите четность:",
-        reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("Чёт", callback_data="even"),
-             InlineKeyboardButton("Нечёт", callback_data="odd")]
-        ])
-    )
-
-    return DICE_CHOICE
-
-
-async def join_existing_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    game_id = context.args[0]
-    if game_id not in games:
-        await update.message.reply_text("❌ Игра не найдена!")
-        return ConversationHandler.END
-
-    user = update.effective_user
-    games[game_id]['players'].append((user.id, user.full_name))
-
-    if len(games[game_id]['players']) == 2:
-        await context.bot.send_message(
-            games[game_id]['chat_id'],
-            f"🌟 Игрок 2 ({user.full_name}) присоединился!"
-        )
-        games[game_id]['dice'] = roll_dice()
-        await context.bot.send_message(
-            games[game_id]['chat_id'],
-            f"🎲 Выпало: {games[game_id]['dice']}\nВыберите четность:",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("Чёт", callback_data="even"),
-                 InlineKeyboardButton("Нечёт", callback_data="odd")]
-            ])
-        )
-        return DICE_CHOICE
-
-    await update.message.reply_text("⏳ Ожидаем второго игрока...")
-    return WAIT_PLAYERS
-
-
-async def handle_dice_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    game_id = context.user_data['game_id']
-    user_id = query.from_user.id
-
-    if user_id not in [p[0] for p in games[game_id]['players']]:
-        await query.message.reply_text("❌ Вы не участник этой игры!")
-        return
-
-    choice = query.data
-    games[game_id]['choices'][user_id] = choice
-
-    if len(games[game_id]['choices']) < len(games[game_id]['players']):
-        return
-    dice = games[game_id]['dice']
-    correct_answer = "even" if dice % 2 == 0 else "odd"
-
-    results = []
-    for player_id, player_choice in games[game_id]['choices'].items():
-        if player_choice == correct_answer:
-            results.append((player_id, True))
-        else:
-            results.append((player_id, False))
-
-    response = ["Результаты угадывания:"]
-    for player_id, is_correct in results:
-        name = next(p[1] for p in games[game_id]['players'] if p[0] == player_id)
-        result = "✅ Угадал" if is_correct else "❌ Не угадал"
-        response.append(f"{name}: {result}")
-
-    await context.bot.send_message(
-        games[game_id]['chat_id'],
-        "\n".join(response)
-    )
-
-    await context.bot.send_message(
-        games[game_id]['chat_id'],
-        "🔢 Теперь угадайте число от 1 до 6:",
-        reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton(str(i), callback_data=f"num_{i}") for i in range(1, 4)],
-            [InlineKeyboardButton(str(i), callback_data=f"num_{i}") for i in range(4, 7)]
-        ])
-    )
-    return NUMBER_GUESS
-
-
-async def handle_number_guess(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    game_id = context.user_data['game_id']
-    user_id = query.from_user.id
-    number = int(query.data.split('_')[1])
-
-    games[game_id]['choices'][user_id] = number
-
-    if len(games[game_id]['choices']) < len(games[game_id]['players']):
-        return
-
-    dice = games[game_id]['dice']
-    closest = min(
-        games[game_id]['choices'].values(),
-        key=lambda x: abs(x - dice)
-    )
-
-    winners = []
-    for player_id, guess in games[game_id]['choices'].items():
-        if guess == closest:
-            winners.append(player_id)
-    response = [f"🎲 Выпало число: {dice}", "Результаты угадывания:"]
-    for player_id, guess in games[game_id]['choices'].items():
-        name = next(p[1] for p in games[game_id]['players'] if p[0] == player_id)
-        result = "🎯 Точное попадание!" if guess == dice else f"Ваш выбор: {guess}"
-        response.append(f"{name}: {result}")
-
-    if len(winners) == 1:
-        winner_id = winners[0]
-        winner_name = next(p[1] for p in games[game_id]['players'] if p[0] == winner_id)
-        response.append(f"\n🏆 Победитель: {winner_name}!")
-        games[game_id]['current_player'] = games[game_id]['players'].index(
-            next(p for p in games[game_id]['players'] if p[0] == winner_id))
-    else:
-        response.append("\n🤝 Ничья! Первый игрок выбирает категорию")
-        games[game_id]['current_player'] = 0
-
-    await context.bot.send_message(
-        games[game_id]['chat_id'],
-        "\n".join(response)
-    )
-
-    return await select_difficulty(context, game_id)
-
-
-async def select_difficulty(context: ContextTypes.DEFAULT_TYPE, game_id: str):
+    await update.message.reply_text(INSTRUCTION)
     buttons = [
-        [InlineKeyboardButton(
-            f"{tier.title()} ({points} очков)",
-            callback_data=f"tier_{tier}"
-        )]
-        for tier, points in POINT_TIERS.items()
+        [InlineKeyboardButton(f"{lvl.title()} ({pts})", callback_data=f"tier_{lvl}")]
+        for lvl, pts in POINT_TIERS.items()
     ]
+    await update.message.reply_text(
+        "🎚 Выберите сложность:",
+        reply_markup=InlineKeyboardMarkup(buttons)
+    )
+    return SELECT_TIER
 
+async def handle_restart(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    await query.edit_message_text(INSTRUCTION)
+    buttons = [
+        [InlineKeyboardButton(f"{lvl.title()} ({pts})", callback_data=f"tier_{lvl}")]
+        for lvl, pts in POINT_TIERS.items()
+    ]
     await context.bot.send_message(
-        chat_id=games[game_id]['chat_id'],
+        chat_id=query.message.chat_id,
         text="🎚 Выберите сложность:",
         reply_markup=InlineKeyboardMarkup(buttons)
     )
     return SELECT_TIER
 
-
-async def handle_difficulty(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_tier(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    game_id = context.user_data['game_id']
     tier = query.data.split('_')[1]
-    games[game_id]['tier'] = tier
-    games[game_id]['points'] = POINT_TIERS[tier]
-    return await select_topic(context, game_id)
-
-
-async def select_topic(context: ContextTypes.DEFAULT_TYPE, game_id: str):
+    context.user_data['points'] = POINT_TIERS[tier]
     buttons = [
         [InlineKeyboardButton(topic, callback_data=f"topic_{topic}")]
         for topic in QUESTIONS.keys()
     ]
-
-    await context.bot.send_message(
-        chat_id=games[game_id]['chat_id'],
-        text="📚 Выберите категорию:",
+    await query.edit_message_text(
+        "📚 Выберите тему:",
         reply_markup=InlineKeyboardMarkup(buttons)
     )
     return SELECT_TOPIC
 
-
 async def handle_topic(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    game_id = context.user_data['game_id']
-    topic = query.data.split('_')[1]
+    topic = query.data.split('_', 1)[1]
+    context.user_data['topic'] = topic
+    all_q = QUESTIONS[topic]
+    pts = context.user_data['points']
+    filtered = [q for q in all_q if q['points'] == pts]
+    random.shuffle(filtered)
+    context.user_data['questions'] = filtered[:7]
+    context.user_data['current'] = 0
+    context.user_data['score'] = 0
+    return await ask_question(update, context)
 
-    game = games[game_id]
-    game['questions'] = [
-        q for q in QUESTIONS[topic]
-        if q['points'] == game['points']
-    ]
-    random.shuffle(game['questions'])
-    game['current_question'] = 0
-    return await ask_question(context, game_id)
-
-
-async def ask_question(context: ContextTypes.DEFAULT_TYPE, game_id: str):
-    game = games[game_id]
-    if game['current_question'] >= len(game['questions']):
-        return await finish_game(context, game_id)
-
-    question = game['questions'][game['current_question']]
-    player_index = game['current_question'] % len(game['players'])
-    player_name = game['players'][player_index][1]
-
+async def ask_question(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    idx = context.user_data['current']
+    questions = context.user_data['questions']
+    if idx >= len(questions):
+        return await finish_game(update, context)
+    q = questions[idx]
     buttons = [
         [InlineKeyboardButton(opt, callback_data=f"ans_{i}")]
-        for i, opt in enumerate(question['options'])
+        for i, opt in enumerate(q['options'])
     ]
-
-    await context.bot.send_message(
-        game['chat_id'],
-        f"🧠 {player_name}, вопрос за {question['points']} очков:\n{question['question']}",
-        reply_markup=InlineKeyboardMarkup(buttons)
-    )
+    if update.callback_query:
+        await update.callback_query.edit_message_text(
+            f"🧠 Вопрос: {q['question']}",
+            reply_markup=InlineKeyboardMarkup(buttons)
+        )
+    else:
+        await update.message.reply_text(
+            f"🧠 Вопрос: {q['question']}",
+            reply_markup=InlineKeyboardMarkup(buttons)
+        )
     return ASK_QUESTION
-
 
 async def handle_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    game_id = context.user_data['game_id']
-    game = games[game_id]
-    question = game['questions'][game['current_question']]
-    answer_index = int(query.data.split('_')[1])
+    idx = context.user_data['current']
+    q = context.user_data['questions'][idx]
+    choice = int(query.data.split('_')[1])
+    if choice == q['answer']:
+        context.user_data['score'] += context.user_data['points']
+    context.user_data['current'] += 1
+    return await ask_question(update, context)
 
-    player_index = game['current_question'] % len(game['players'])
-    if answer_index == question['answer']:
-        game['scores'][player_index] += question['points']
-    else:
-        game['scores'][player_index] -= question['points'] // 2
-
-    game['current_question'] += 1
-    await query.edit_message_reply_markup()
-    return await ask_question(context, game_id)
-
-
-async def finish_game(context: ContextTypes.DEFAULT_TYPE, game_id: str):
-    game = games[game_id]
-    results = "\n".join(
-        f"🏅 {name}: {score} очков"
-        for (_, name), score in zip(game['players'], game['scores'])
+async def finish_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    score = context.user_data['score']
+    topic = context.user_data['topic']
+    text = f"🏁 Тема: {topic}\nВаш счет: {score} очков"
+    await update.callback_query.edit_message_text(
+        text,
+        reply_markup=restart_keyboard()
     )
-
-    buttons = InlineKeyboardMarkup([
-        [InlineKeyboardButton("🔄 Новая игра", callback_data="new_game"),
-         InlineKeyboardButton("🏠 Выход", callback_data="exit")]
-    ])
-
-    await context.bot.send_message(
-        game['chat_id'],
-        f"🏁 Игра завершена!\n\n{results}",
-        reply_markup=buttons
-    )
-
+    # Сохранение результата
+    game_id = str(datetime.datetime.now().timestamp())
+    games[game_id] = context.user_data.copy()
     save_game(game_id)
-    del games[game_id]
     return GAME_OVER
 
-
-async def handle_restart(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-
-    if query.data == "new_game":
-        context.user_data.clear()
-        await query.edit_message_text("🔄 Начинаем новую игру...")
-        return await start(update, context)
-
-    await query.edit_message_text("🚪 Выход в главное меню")
-    return ConversationHandler.END
-
-
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    logger.error(msg="Exception while handling update:", exc_info=context.error)
-    if update and update.effective_chat:
+    logger.error(msg="Exception:", exc_info=context.error)
+    chat_id = update.effective_chat.id if update.effective_chat else None
+    if chat_id:
         await context.bot.send_message(
-            chat_id=update.effective_chat.id,
-            text="⚠️ Произошла ошибка. Попробуйте перезапустить бота:",
+            chat_id,
+            text="⚠️ Произошла ошибка. Перезапустите бота:",
             reply_markup=restart_keyboard()
         )
     return ConversationHandler.END
@@ -543,29 +309,20 @@ def main():
     init_db()
     app = ApplicationBuilder().token(TOKEN).build()
 
-    conv_handler = ConversationHandler(
-        entry_points=[
-            CommandHandler('start', start),
-            CallbackQueryHandler(restart_callback, pattern='^force_restart$')
-        ],
+    conv = ConversationHandler(
+        entry_points=[CommandHandler('start', start)],
         states={
-            SELECT_PLAYERS: [MessageHandler(filters.TEXT & ~filters.COMMAND, select_players)],
-            WAIT_PLAYERS: [CommandHandler('start', join_existing_game)],
-            DICE_CHOICE: [CallbackQueryHandler(handle_dice_choice, pattern=r'^(even|odd)$')],
-            NUMBER_GUESS: [CallbackQueryHandler(handle_number_guess, pattern=r'^num_')],
-            SELECT_TIER: [CallbackQueryHandler(handle_difficulty, pattern=r'^tier_')],
-            SELECT_TOPIC: [CallbackQueryHandler(handle_topic, pattern=r'^topic_')],
-            ASK_QUESTION: [CallbackQueryHandler(handle_answer, pattern=r'^ans_')],
-            GAME_OVER: [CallbackQueryHandler(handle_restart, pattern=r'^(new_game|exit|force_restart)$')]
+            SELECT_TIER: [CallbackQueryHandler(handle_tier, pattern='^tier_')],
+            SELECT_TOPIC: [CallbackQueryHandler(handle_topic, pattern='^topic_')],
+            ASK_QUESTION: [CallbackQueryHandler(handle_answer, pattern='^ans_')],
+            GAME_OVER: [CallbackQueryHandler(handle_restart, pattern='^restart$')]
         },
-        fallbacks=[CommandHandler('start', start)],
-        per_message=False
+        fallbacks=[CommandHandler('start', start)]
     )
 
-    app.add_handler(conv_handler)
+    app.add_handler(conv)
     app.add_error_handler(error_handler)
     app.run_polling()
-
 
 if __name__ == '__main__':
     main()
